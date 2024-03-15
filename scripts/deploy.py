@@ -3,6 +3,7 @@ from web3 import Web3
 from eth_abi import encode_abi
 from eth_account.messages import encode_defunct
 from eth_account import Account
+from datetime import datetime
 from brownie import (
     IdentityRegistry,
     ClaimTopicsRegistry,
@@ -10,11 +11,15 @@ from brownie import (
     IdentityRegistryStorage,
     Identity,
     ClaimIssuer,
+    Token,
+    ERC20Mock,
+    PaymentToken,
     accounts,
+    config,
 )
 
 
-def deploy():
+def test():
     # Setting up accounts and deploying contracts
     account = get_account()
     account1 = accounts.add(
@@ -92,7 +97,7 @@ def deploy():
     )
 
     # Revoking claim
-    claimIssuer.revokeClaim(claimRequestId, identity.address, {"from": account1})
+    # claimIssuer.revokeClaim(claimRequestId, identity.address, {"from": account1})
     print(
         "Is Claim #{} revoked: {}".format(
             claimRequestId, claimIssuer.isClaimRevoked(signedObject.signature)
@@ -104,6 +109,86 @@ def deploy():
         )
     )
 
+    # Testing execute and approve functions
+    # calldata = token.test.encode_input()
+    # execute_tx = identity.execute(token.address, 0, calldata, {"from": account})
+
+    payment_token = PaymentToken.deploy(1e9, {"from": account})
+    token = Token.deploy(
+        "Name",
+        "Symbol",
+        1e9,
+        0,
+        int(datetime(2025, 3, 5, 19, 14).timestamp()),
+        payment_token.address,
+        identityRegistry.address,
+        100,
+        {"from": account},
+    )
+
+
+def deploy():
+    # Setting up accounts and deploying contracts
+    account = get_account()
+    account1 = accounts.add(config["wallets"]["from_key"])
+    trustedIssuersRegistry = TrustedIssuersRegistry.deploy({"from": account})
+    claimTopicsRegistry = ClaimTopicsRegistry.deploy({"from": account})
+    identityStorage = IdentityRegistryStorage.deploy({"from": account})
+    identityRegistry = IdentityRegistry.deploy(
+        trustedIssuersRegistry, claimTopicsRegistry, identityStorage, {"from": account}
+    )
+    identity = Identity.deploy(account, False, {"from": account})
+    claimIssuer = ClaimIssuer.deploy(account1, {"from": account})
+
+    # Registering the claim key with the identity contract
+    encoded_data = encode_abi(["address"], [account1.address])
+    account1_key = Web3.keccak(encoded_data)
+    identity.addKey(account1_key, 3, 1, {"from": account})
+
+    # Adding claim
+    data = Web3.toBytes(text="CFI code test")
+    encoded_message = encode_abi(
+        ["address", "uint256", "bytes"], [identity.address, 1947, data]
+    )
+    hashed_message = Web3.keccak(encoded_message)
+    msg = encode_defunct(hexstr=str(hashed_message.hex()))
+    signedObject = Account.sign_message(msg, config["wallets"]["from_key"])
+    identity.addClaim(
+        1947,
+        1,
+        claimIssuer.address,
+        signedObject.signature,
+        data,
+        "Placeholder URI",
+        {"from": account},
+    )
+
+    # Adding identity to the identity registry
+    identityRegistry.registerIdentity(account, identity, 586)
+
+    # Adding trusted claim issuer to trusted issuers registry
+    trustedIssuersRegistry.addTrustedIssuer(
+        claimIssuer.address, [1947], {"from": account}
+    )
+
+    # Adding claim topic to Claim Topics Registry
+    claimTopicsRegistry.addClaimTopic(1947, {"from": account})
+
+    # Deploying tokens
+    payment_token = PaymentToken.deploy(1e9, {"from": account})
+    token = Token.deploy(
+        "Name",
+        "Symbol",
+        1e9,
+        0,
+        int(datetime(2025, 3, 5, 19, 14).timestamp()),
+        payment_token.address,
+        identityRegistry.address,
+        100,
+        {"from": account},
+    )
+    return (payment_token, identityRegistry)
+
 
 def main():
-    deploy()
+    (payment_token, identityRegistry) = deploy()

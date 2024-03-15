@@ -1,4 +1,5 @@
 from scripts.helpfulscripts import get_account
+from scripts.deploy import deploy
 from brownie import Token, ERC20Mock, PaymentToken, exceptions, interface, chain
 from datetime import datetime
 import pytest
@@ -15,6 +16,7 @@ def test_can_set_redemption_state():
         0,
         1741075174,
         account,
+        account,
         100,
         {"from": account},
     )
@@ -28,6 +30,7 @@ def test_can_set_redemption_state():
             100,
             0,
             100,
+            account,
             account,
             100,
             {"from": account},
@@ -52,6 +55,7 @@ def test_can_add_exchangeable_token():
         redeem_state,
         buyback_date,
         payment_token,
+        payment_token,
         price,
         {"from": account},
     )
@@ -68,6 +72,7 @@ def test_can_add_exchangeable_token():
         initial_supply,
         3,
         buyback_date,
+        payment_token,
         payment_token,
         price,
         {"from": account},
@@ -104,6 +109,7 @@ def test_can_extend_buyback_date():
         redeem_state,
         buyback_date,
         payment_token,
+        payment_token,
         price,
         {"from": account},
     )
@@ -123,6 +129,7 @@ def test_can_extend_buyback_date():
         initial_supply,
         0,
         buyback_date,
+        payment_token,
         payment_token,
         price,
         {"from": account},
@@ -149,6 +156,7 @@ def test_can_issue_token():
         redeem_state,
         buyback_date,
         payment_token,
+        payment_token,
         price,
         {"from": account},
     )
@@ -168,12 +176,12 @@ def test_can_issue_token():
 def test_can_exchange_token():
     # Arrange
     account = get_account()
+    (payment_token, identityRegistry) = deploy()
     token_name = "Test"
     token_symbol = "Test"
     initial_supply = 100
     redeem_state = 6
     buyback_date = 1741075174  # refers to 2025 March 4, 12:59:34 (PKT)
-    payment_token = account
     price = 100
     token = Token.deploy(
         token_name,
@@ -182,6 +190,7 @@ def test_can_exchange_token():
         redeem_state,
         buyback_date,
         payment_token,
+        identityRegistry,
         price,
         {"from": account},
     )
@@ -210,6 +219,7 @@ def test_can_exchange_token():
         1,
         buyback_date,
         payment_token,
+        identityRegistry,
         price,
         {"from": account},
     )
@@ -220,12 +230,12 @@ def test_can_exchange_token():
 def test_can_redeem_tokens():
     # Arrange
     account = get_account()
+    (payment_token, identityRegistry) = deploy()
     token_name = "Test"
     token_symbol = "Test"
     initial_supply = 1e9
     redeem_state = 0
-    buyback_date = int(datetime(2024, 3, 5, 19, 14).timestamp())
-    payment_token = PaymentToken.deploy(1e9, {"from": account})
+    buyback_date = int(datetime(2024, 3, 13, 12, 42).timestamp())
     price = 100
     token = Token.deploy(
         token_name,
@@ -234,6 +244,7 @@ def test_can_redeem_tokens():
         redeem_state,
         buyback_date,
         payment_token,
+        identityRegistry.address,
         price,
         {"from": account},
     )
@@ -244,6 +255,7 @@ def test_can_redeem_tokens():
         3,
         buyback_date,
         payment_token,
+        identityRegistry.address,
         price,
         {"from": account},
     )
@@ -254,6 +266,7 @@ def test_can_redeem_tokens():
         0,
         buyback_date,
         payment_token,
+        identityRegistry.address,
         price,
         {"from": account},
     )

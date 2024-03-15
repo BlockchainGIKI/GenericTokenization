@@ -5,6 +5,7 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IIdentityRegistry} from "@T-REX/contracts/registry/interface/IIdentityRegistry.sol";
 import {Asset} from "./Asset.sol";
 
 contract Token is Ownable {
@@ -19,6 +20,7 @@ contract Token is Ownable {
     error Token__ExchangeFailed();
     error Token__InsufficientTokenBalance();
     error Token__InsufficientTokenAllowance();
+    error Token__InvestorNotVerified();
 
     ///////////////////
     // Enums //////////
@@ -40,6 +42,7 @@ contract Token is Ownable {
     uint256 public buybackDate;
     address[] public authorizedExchangeableTokens;
     address public paymentToken;
+    address public identityRegistry;
     uint256 public price;
     Asset private asset;
 
@@ -112,8 +115,17 @@ contract Token is Ownable {
         _;
     }
 
+    event Sender(address Sender);
+    modifier isVerified() {
+        if (!IIdentityRegistry(identityRegistry).isVerified(msg.sender)) {
+            emit Sender(msg.sender);
+            revert Token__InvestorNotVerified();
+        }
+        _;
+    }
+
     ///////////////////
-    // Functions /////////
+    // Functions //////
     ///////////////////
     constructor(
         string memory _name,
@@ -122,12 +134,14 @@ contract Token is Ownable {
         Redemption _redemptionState,
         uint256 _buybackDate,
         address _paymentToken,
+        address _identityRegistry,
         uint256 _price
     ) {
         // _mint(address(this), _initialSupply);
         asset = new Asset(_initialSupply, _name, _symbol);
         redemptionState = _redemptionState;
         paymentToken = _paymentToken;
+        identityRegistry = _identityRegistry;
         price = _price;
         if (
             _redemptionState != Redemption.EXCHANGEABLE &&
@@ -171,6 +185,7 @@ contract Token is Ownable {
         uint256 _amount
     )
         public
+        isVerified
         isExchangeable
         isAllowedExchangeToken(_exchangeToken)
         hasSufficientBalance(_amount, msg.sender)
@@ -198,6 +213,7 @@ contract Token is Ownable {
         uint256 _amount
     )
         public
+        isVerified
         isRedeemable
         isNonZero(_amount)
         hasSufficientBalance(_amount, msg.sender)
