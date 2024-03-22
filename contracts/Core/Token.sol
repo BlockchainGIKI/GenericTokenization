@@ -21,6 +21,12 @@ contract Token is Ownable {
     error Token__InsufficientTokenBalance();
     error Token__InsufficientTokenAllowance();
     error Token__InvestorNotVerified();
+    error Token__TokenIsNotOfPayableType();
+    error Token__InterestRateIsNotOfVariableType();
+    error Token__InterestTypeIsNotPaymentInKind();
+    error Token__InterestTypeIsNotFixedOrVariableRate();
+    error Token__InterestTypeIsNotCashPayment();
+    error Token__InvestorDoesNotExist();
 
     ///////////////////
     // Enums //////////
@@ -35,22 +41,89 @@ contract Token is Ownable {
         REDEEMABLE_EXCHANGEABLE_EXTENDIBLE
     }
 
+    enum PaymentFrequency {
+        NONE,
+        DAILY,
+        WEEKLY,
+        SEMIMONTHLY,
+        MONTHLY,
+        ANNUALY
+    }
+
+    enum InterestType {
+        NONE,
+        FIXED,
+        ZERO,
+        VARIABLE,
+        CASH,
+        PAYMENT_IN_KIND
+    }
+
+    ///////////////////
+    // Struct /////////
+    ///////////////////
+    struct CashReceipt {
+        uint256 receiptNumber;
+        uint256 date;
+        address tokenHolder;
+        uint256 amount;
+        bytes signature;
+    }
+
+    struct TokenOptions {
+        Redemption _redemptionState;
+        PaymentFrequency _paymentFrequency;
+        InterestType _interestType;
+    }
+
     ////////////////////
     // State Variables /
     ///////////////////
-    Redemption public redemptionState;
-    uint256 public buybackDate;
-    address[] public authorizedExchangeableTokens;
-    address public paymentToken;
-    address public identityRegistry;
-    uint256 public price;
-    Asset private asset;
 
+    // Used to specify remdemption state of the token
+    Redemption public redemptionState;
+    // Used to specify payment frequency of the token
+    PaymentFrequency public paymentFrequency;
+    // Used to specify type of interest rate of the token
+    InterestType public interestType;
+    // Used to specify maturity date of the token
+    uint256 public maturityDate;
+    // Set to the current block timestamp when the contract is deployed
+    uint256 public contractDeploymentTime;
+    // Used to maintain an array of authorized tokens that can exchanged or redeemed for this token
+    address[] public authorizedExchangeableTokens;
+    // Set to the address of the underlying payment currency during contract deployment
+    address public paymentToken;
+    // Set to the address of the identity registry during contract deployment
+    address public identityRegistry;
+    // Set to the exchange rate of the token to the payment currency during contract deployment
+    uint256 public price;
+    // The face value of the asset
+    uint256 public faceValue;
+    // Refers to the underlying token created during contract deployment
+    Asset private asset;
+    // Keeps track of the current payment period if the token grants the investors the right to receive periodic payments
+    uint256 private paymentPeriod;
+    // Refers to the interest rate of the token set during contract deployment. Can optionally be modified if interest rate type is variable
+    uint256 public interestRate;
+    ////////////////////
+    // Constants ///////
+    ///////////////////
+    uint256 private constant AVERAGE_SECONDS_IN_A_DAY = 86400;
+    uint256 private constant AVERAGE_SECONDS_IN_A_WEEK = 604800;
+    uint256 private constant AVERAGE_SECONDS_IN_SEMI_MONTH = 1209600;
+    uint256 private constant AVERAGE_SECONDS_IN_A_MONTH = 2628288;
+    uint256 private constant AVERAGE_SECONDS_IN_A_YEAR = 31556952;
+    uint256 private constant INTEREST_RATE_PRECISION = 1000;
     ///////////////////
     // Mappings ///////
     ///////////////////
     mapping(address => uint256) public conversionRate;
-
+    mapping(PaymentFrequency => uint256) private paymentFrequencyToSeconds;
+    mapping(address => mapping(uint256 => bool))
+        public investorToPaymentPeriodToStatus;
+    mapping(address => mapping(uint256 => CashReceipt))
+        public investorToPaymentPeriodToReceipt;
     ///////////////////
     // Modifiers //////
     ///////////////////
@@ -115,11 +188,55 @@ contract Token is Ownable {
         _;
     }
 
-    event Sender(address Sender);
     modifier isVerified() {
         if (!IIdentityRegistry(identityRegistry).isVerified(msg.sender)) {
-            emit Sender(msg.sender);
             revert Token__InvestorNotVerified();
+        }
+        _;
+    }
+
+    modifier isPayable() {
+        if (paymentFrequency == PaymentFrequency.NONE) {
+            revert Token__TokenIsNotOfPayableType();
+        }
+        _;
+    }
+
+    modifier isVariable() {
+        if (interestType != InterestType.VARIABLE) {
+            revert Token__InterestRateIsNotOfVariableType();
+        }
+        _;
+    }
+
+    modifier isPaymentInKind() {
+        if (interestType != InterestType.PAYMENT_IN_KIND) {
+            revert Token__InterestTypeIsNotPaymentInKind();
+        }
+        _;
+    }
+
+    modifier isFixedOrVariableRate() {
+        if (
+            interestType != InterestType.FIXED &&
+            interestType != InterestType.VARIABLE
+        ) {
+            revert Token__InterestTypeIsNotFixedOrVariableRate();
+        }
+        _;
+    }
+
+    modifier isCashPayment() {
+        if (interestType != InterestType.CASH) {
+            revert Token__InterestTypeIsNotCashPayment();
+        }
+        _;
+    }
+
+    modifier investorExists(address _investor) {
+        (bool status, ) = asset.tokenHolderExists(_investor);
+        if (!status) {
+            revert Token__InvestorDoesNotExist();
         }
         _;
     }
@@ -131,28 +248,54 @@ contract Token is Ownable {
         string memory _name,
         string memory _symbol,
         uint256 _initialSupply,
-        Redemption _redemptionState,
-        uint256 _buybackDate,
+        // Redemption _redemptionState,
+        // PaymentFrequency _paymentFrequency,
+        // InterestType _interestType,
+        TokenOptions memory options,
+        uint256 _maturityDate,
         address _paymentToken,
         address _identityRegistry,
-        uint256 _price
+        uint256 _price,
+        uint256 _faceValue,
+        uint256 _interestRate
     ) {
         // _mint(address(this), _initialSupply);
-        asset = new Asset(_initialSupply, _name, _symbol);
-        redemptionState = _redemptionState;
+        asset = new Asset(_initialSupply, _name, _symbol, _identityRegistry);
+        redemptionState = options._redemptionState;
+        paymentFrequency = options._paymentFrequency;
+        interestType = options._interestType;
         paymentToken = _paymentToken;
         identityRegistry = _identityRegistry;
         price = _price;
+        faceValue = _faceValue;
+        interestRate = _interestRate;
         if (
-            _redemptionState != Redemption.EXCHANGEABLE &&
-            _redemptionState != Redemption.PERPETUAL
+            (options._redemptionState != Redemption.EXCHANGEABLE &&
+                options._redemptionState != Redemption.PERPETUAL) ||
+            options._paymentFrequency != PaymentFrequency.NONE
         ) {
             require(
-                _buybackDate > block.timestamp,
+                _maturityDate > block.timestamp,
                 "Buyback date should be greater than current time"
             );
-            buybackDate = _buybackDate;
+            maturityDate = _maturityDate;
         }
+        paymentFrequencyToSeconds[
+            PaymentFrequency.DAILY
+        ] = AVERAGE_SECONDS_IN_A_DAY;
+        paymentFrequencyToSeconds[
+            PaymentFrequency.SEMIMONTHLY
+        ] = AVERAGE_SECONDS_IN_SEMI_MONTH;
+        paymentFrequencyToSeconds[
+            PaymentFrequency.WEEKLY
+        ] = AVERAGE_SECONDS_IN_A_WEEK;
+        paymentFrequencyToSeconds[
+            PaymentFrequency.MONTHLY
+        ] = AVERAGE_SECONDS_IN_A_MONTH;
+        paymentFrequencyToSeconds[
+            PaymentFrequency.ANNUALY
+        ] = AVERAGE_SECONDS_IN_A_YEAR;
+        contractDeploymentTime = block.timestamp;
     }
 
     function addExchangeableToken(
@@ -206,7 +349,7 @@ contract Token is Ownable {
             _buybackDate > block.timestamp,
             "Buyback date should be greater than current time"
         );
-        buybackDate = _buybackDate;
+        maturityDate = _buybackDate;
     }
 
     function redeemToken(
@@ -220,7 +363,7 @@ contract Token is Ownable {
         hasSufficientAllowance(_amount, msg.sender)
     {
         require(
-            buybackDate < block.timestamp,
+            maturityDate < block.timestamp,
             "Buyback date should be less than current time"
         );
         require(
@@ -237,6 +380,129 @@ contract Token is Ownable {
         }
     }
 
+    function payInterest(
+        address _investor
+    )
+        public
+        onlyOwner
+        isPayable
+        isFixedOrVariableRate
+        investorExists(_investor)
+    {
+        require(block.timestamp < maturityDate, "Token has reached maturity");
+        uint256 payment = (interestRate * faceValue) / INTEREST_RATE_PRECISION;
+        require(
+            IERC20(paymentToken).balanceOf(address(this)) >= payment,
+            "You do not have sufficient balance to pay this investor!"
+        );
+        uint256 duration = (block.timestamp - contractDeploymentTime) /
+            paymentFrequencyToSeconds[paymentFrequency];
+        require(
+            !investorToPaymentPeriodToStatus[_investor][duration],
+            "The investor has already been paid for this payment period"
+        );
+        bool success = IERC20(paymentToken).transfer(_investor, payment);
+        if (!success) {
+            revert Token__ExchangeFailed();
+        }
+        investorToPaymentPeriodToStatus[_investor][duration] = true;
+    }
+
+    function payInterestToAll()
+        public
+        onlyOwner
+        isPayable
+        isFixedOrVariableRate
+    {
+        require(block.timestamp < maturityDate, "Token has reached maturity");
+        uint256 duration = (block.timestamp - contractDeploymentTime) /
+            paymentFrequencyToSeconds[paymentFrequency];
+        require(
+            duration == paymentPeriod + 1,
+            "You cannot pay interest during this payment period"
+        );
+        address[] memory tokenHolders = asset.getTokenHolders();
+        uint256 payment = (interestRate * faceValue) / INTEREST_RATE_PRECISION;
+        require(
+            IERC20(paymentToken).balanceOf(address(this)) >=
+                payment * tokenHolders.length,
+            "You do not have sufficient balance to pay all token holders!"
+        );
+        for (uint256 i = 0; i < tokenHolders.length; i++) {
+            if (
+                !investorToPaymentPeriodToStatus[tokenHolders[i]][
+                    paymentPeriod + 1
+                ]
+            ) {
+                IERC20(paymentToken).transfer(tokenHolders[i], payment);
+                investorToPaymentPeriodToStatus[tokenHolders[i]][
+                    paymentPeriod + 1
+                ] = true;
+            }
+        }
+        paymentPeriod += 1;
+    }
+
+    function payInterestInPaymentInKind(
+        address _tokenAddress,
+        uint256 _tokenAmount
+    )
+        public
+        onlyOwner
+        isPaymentInKind
+        isPayable
+        isAllowedExchangeToken(_tokenAddress)
+    {
+        require(block.timestamp < maturityDate, "Token has reached maturity");
+        uint256 duration = (block.timestamp - contractDeploymentTime) /
+            paymentFrequencyToSeconds[paymentFrequency];
+        require(
+            duration == paymentPeriod + 1,
+            "You cannot pay interest during this payment period"
+        );
+        address[] memory tokenHolders = asset.getTokenHolders();
+        require(
+            IERC20(_tokenAddress).balanceOf(address(this)) >= _tokenAmount,
+            "You do not have sufficient balance to pay all token holders!"
+        );
+        for (uint256 i = 0; i < tokenHolders.length; i++) {
+            if (
+                !investorToPaymentPeriodToStatus[tokenHolders[i]][
+                    paymentPeriod + 1
+                ]
+            ) {
+                IERC20(_tokenAddress).transfer(tokenHolders[i], _tokenAmount);
+                investorToPaymentPeriodToStatus[tokenHolders[i]][
+                    paymentPeriod + 1
+                ] = true;
+            }
+        }
+        paymentPeriod += 1;
+    }
+
+    function payInterestInCash(
+        CashReceipt[] memory test
+    ) public onlyOwner isCashPayment isPayable {
+        require(block.timestamp < maturityDate, "Token has reached maturity");
+        uint256 duration = (block.timestamp - contractDeploymentTime) /
+            paymentFrequencyToSeconds[paymentFrequency];
+        require(
+            duration == paymentPeriod + 1,
+            "You cannot pay interest during this payment period"
+        );
+        address[] memory tokenHolders = asset.getTokenHolders();
+    }
+
+    function updatePrice(uint256 _price) public onlyOwner isNonZero(_price) {
+        price = _price;
+    }
+
+    function modifyInterestRate(
+        uint256 _rate
+    ) public onlyOwner isVariable isNonZero(_rate) {
+        interestRate = _rate;
+    }
+
     function getBalance(address _user) public view returns (uint256) {
         return asset.balanceOf(_user);
     }
@@ -244,4 +510,16 @@ contract Token is Ownable {
     function getAddress() public view returns (address) {
         return address(asset);
     }
+
+    function getTimestamp() public view returns (uint256) {
+        return block.timestamp;
+    }
+
+    function getMaturity() public view returns (uint256) {
+        return maturityDate;
+    }
+
+    // function test(CashReceipt memory _cash) public pure returns (uint256) {
+    //     return _cash.date;
+    // }
 }

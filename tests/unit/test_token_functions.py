@@ -1,6 +1,15 @@
 from scripts.helpfulscripts import get_account
 from scripts.deploy import deploy
-from brownie import Token, ERC20Mock, PaymentToken, exceptions, interface, chain
+from brownie import (
+    Token,
+    ERC20Mock,
+    PaymentToken,
+    exceptions,
+    interface,
+    chain,
+    accounts,
+    config,
+)
 from datetime import datetime
 import pytest
 
@@ -293,3 +302,118 @@ def test_can_redeem_tokens():
         token2.redeemToken(101, {"from": account})
     with pytest.raises(exceptions.VirtualMachineError):
         token2.redeemToken(100, {"from": account})
+
+
+def test_can_pay_interest():
+    # Arrange
+    account = get_account()
+    account1 = accounts.add(config["wallets"]["from_key"])
+    account2 = get_account(2)
+    (payment_token, identityRegistry) = deploy()
+    token_name = "Test"
+    token_symbol = "Test"
+    initial_supply = 1e12
+    redeem_state = 0  # Redeemable
+    payment_frequency = 1  # Daily
+    interest_type = 0  #
+    maturity_date = int(datetime(2025, 3, 13, 12, 42).timestamp())
+    price = 100
+    face_value = 100
+    interest_rate = 1000
+    token = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        (redeem_state, payment_frequency, interest_type),
+        maturity_date,
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        face_value,
+        interest_rate,
+        {"from": account},
+    )
+    payment_token.transfer(token, 1e6, {"from": account1})
+    token.issueToken(100, account, {"from": account})
+    chain.sleep(86400 + 60 * 60 * 12)
+    chain.mine(1)
+    # Act
+    token.payInterest(account, {"from": account})
+
+
+def test_can_pay_interest_to_all_token_holders():
+    # Arrange
+    account = get_account()
+    account1 = accounts.add(config["wallets"]["from_key"])
+    account2 = get_account(2)
+    (payment_token, identityRegistry) = deploy()
+    token_name = "Test"
+    token_symbol = "Test"
+    initial_supply = 1e12
+    redeem_state = 0  # Redeemable
+    payment_frequency = 1  # Daily
+    maturity_date = int(datetime(2025, 3, 13, 12, 42).timestamp())
+    price = 100
+    token = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        redeem_state,
+        payment_frequency,
+        maturity_date,
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        {"from": account},
+    )
+    payment_token.transfer(token, 1e6, {"from": account1})
+    token.issueToken(100, account, {"from": account})
+    token.issueToken(100, account2, {"from": account})
+    token1 = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        3,
+        5,
+        int(datetime(2050, 3, 13, 12, 42).timestamp()),
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        {"from": account},
+    )
+    token1.issueToken(100, account, {"from": account})
+    token1.issueToken(100, account2, {"from": account})
+    # Act
+    chain.sleep(86400 + 60 * 60 * 12)
+    chain.mine(1)
+    rate = 150
+    token.payInterestToAll(rate, {"from": account})
+    chain.sleep(31556952)
+    chain.mine(1)
+    # Assert
+    assert payment_token.balanceOf(account) == (rate * price) / 1000
+    assert payment_token.balanceOf(account2) == (rate * price) / 1000
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.payInterestToAll(rate, {"from": account})
+    with pytest.raises(exceptions.VirtualMachineError):
+        token1.payInterestToAll(rate, {"from": account1})
+    with pytest.raises(exceptions.VirtualMachineError):
+        token1.payInterestToAll(rate, {"from": account})
+    payment_token.transfer(token1, 1e6, {"from": account1})
+    token1.payInterestToAll(rate, {"from": account})
+    assert payment_token.balanceOf(account) == ((rate * price) / 1000) * 2
+    assert payment_token.balanceOf(account2) == ((rate * price) / 1000) * 2
+    token2 = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        3,
+        0,
+        int(datetime(2050, 3, 13, 12, 42).timestamp()),
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        {"from": account},
+    )
+    with pytest.raises(exceptions.VirtualMachineError):
+        token2.payInterestToAll(rate, {"from": account})
