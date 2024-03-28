@@ -215,16 +215,30 @@ def main():
     # token = Token.deploy(
     #     "Some",
     #     "Some",
-    #     1e6,
-    #     0,
-    #     0,
-    #     0,
-    #     int(datetime(2025, 3, 5, 19, 14).timestamp()),
-    #     account,
-    #     account,
     #     1000,
+    #     (3, 5, 4, 0),
+    #     int(datetime(2029, 3, 27, 11, 52).timestamp()),
+    #     payment_token,
+    #     identityRegistry,
+    #     1000,
+    #     100,
+    #     10,
     #     {"from": account},
     # )
+    # print((token.maturityDate() - token.contractDeploymentTime()) / 2629800)
+    # r = token.periodicInterestRate() / 10**8
+    # n = token.loanTerm() / 10**8
+    # print(r)
+    # print(n)
+    # nume = r * (1 + r) ** n  # * pow(10, 8)
+    # deno = (1 + r) ** n - 1  # * pow(10, 8)
+    # print(nume)
+    # print(deno)
+    # temp = 1e5 * ((0.00833 * (1 + 0.00833) ** 60) / (((1 + 0.00833) ** 60) - 1))
+    # print(temp)
+    # token.setAmortizationSchedule(nume * 10**8, deno * 10**8)
+    # monthly = token.getPeriodicPayment()
+    # print(monthly / 1e8)
     # params = {
     #     "receiptNumber": 1,
     #     "date": 2,
