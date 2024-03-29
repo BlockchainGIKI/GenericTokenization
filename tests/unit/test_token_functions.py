@@ -1690,3 +1690,180 @@ def test_cannot_pay_amortized_payments_after_maturity():
     assert token.investorToMaturityPaymentStatus(account) == True
     with pytest.raises(exceptions.VirtualMachineError):
         token.payAmortizedPayments(account, {"from": account1})
+
+
+def test_can_call_token():
+    # Arrange
+    account = get_account()
+    account1 = accounts.add(config["wallets"]["from_key"])
+    account2 = get_account(2)
+    (payment_token, identityRegistry) = deploy()
+    token_name = "Test"
+    token_symbol = "Test"
+    redeem_state = 0  # Redeemable
+    reimburse_state = 4  # Fixed maturity with put and call
+    payment_frequency = 4  # Monthly
+    interest_type = 1  # Fixed
+    maturity_date = int(datetime(2029, 3, 27, 15, 42).timestamp())
+    price = 100
+    face_value = 100
+    interest_rate = 10
+    initial_supply = 100
+    token = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        (redeem_state, reimburse_state, payment_frequency, interest_type),
+        maturity_date,
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        face_value,
+        interest_rate,
+        {"from": account1},
+    )
+    amount = 50
+    token.issueToken(amount, account, {"from": account1})
+    payment_token.transfer(token, amount * face_value, {"from": account1})
+    # Act
+    # Checking 'Only Owner' Condition
+    # ---------------------------------------------
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callToken(account, 0, {"from": account})
+    # ---------------------------------------------
+    token.callToken(account, 0, {"from": account1})
+    # Assert
+    assert token.getBalance(account) == 0
+    assert payment_token.balanceOf(account) == amount * face_value
+    assert token.getTotalSupply() == initial_supply - amount
+    # Checking 'Investor Exists' Condition
+    # ---------------------------------------------
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callToken(account2, 0, {"from": account1})
+    # ---------------------------------------------
+    # Checking 'Insufficient Balance' Condition
+    # ---------------------------------------------
+    token.issueToken(amount, account2, {"from": account1})
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callToken(account2, 0, {"from": account1})
+    # ---------------------------------------------
+    # Checking 'Current Time < Maturity' Condition
+    # ---------------------------------------------
+    payment_token.transfer(token, amount * face_value + 100, {"from": account1})
+    chain.sleep(31556952 * 5 + 86400)
+    chain.mine(1)
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callToken(account2, 0, {"from": account1})
+    # ---------------------------------------------
+    # Checking 'Is Callable' Condition
+    # ---------------------------------------------
+    token1 = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        (redeem_state, 1, payment_frequency, interest_type),
+        int(datetime(2034, 3, 27, 15, 42).timestamp()),
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        face_value,
+        interest_rate,
+        {"from": account1},
+    )
+    token1.issueToken(amount, account, {"from": account1})
+    payment_token.transfer(token1, amount * face_value, {"from": account1})
+    with pytest.raises(exceptions.VirtualMachineError):
+        token1.callToken(account, 0, {"from": account1})
+    # ---------------------------------------------
+
+
+def test_can_call_token_from_all():
+    # Arrange
+    account = get_account()
+    account1 = accounts.add(config["wallets"]["from_key"])
+    account2 = get_account(2)
+    (payment_token, identityRegistry) = deploy()
+    token_name = "Test"
+    token_symbol = "Test"
+    redeem_state = 0  # Redeemable
+    reimburse_state = 4  # Fixed maturity with put and call
+    payment_frequency = 4  # Monthly
+    interest_type = 1  # Fixed
+    maturity_date = int(datetime(2029, 3, 27, 15, 42).timestamp())
+    price = 100
+    face_value = 100
+    interest_rate = 10
+    initial_supply = 150
+    token = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        (redeem_state, reimburse_state, payment_frequency, interest_type),
+        maturity_date,
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        face_value,
+        interest_rate,
+        {"from": account1},
+    )
+    amount = 50
+    dividend = 100
+    token.issueToken(amount, account, {"from": account1})
+    token.issueToken(amount, account2, {"from": account1})
+    payment_token.transfer(
+        token, (amount * face_value + dividend) * 3, {"from": account1}
+    )
+    chain.sleep(31556952)
+    chain.mine(1)
+    # Act
+    # Checking 'Only Owner' Condition
+    # ---------------------------------------------
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callTokenFromAll(dividend, {"from": account})
+    # ---------------------------------------------
+    token.callTokenFromAll(dividend, {"from": account1})
+    # Assert
+    assert token.getBalance(account) == 0
+    assert token.getBalance(account2) == 0
+    assert token.getTotalSupply() == initial_supply - amount * 2
+    assert payment_token.balanceOf(account) == amount * face_value + dividend
+    assert payment_token.balanceOf(account2) == amount * face_value + dividend
+    # Checking 'Insufficient Balance' Condition
+    # ---------------------------------------------
+    token.issueToken(amount, account2, {"from": account1})
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callTokenFromAll(dividend * 2, {"from": account1})
+    # ---------------------------------------------
+    # Checking 'Current Time < Maturity' Condition
+    # ---------------------------------------------
+    chain.sleep(31556952 * 5 + 86400)
+    chain.mine(1)
+    with pytest.raises(exceptions.VirtualMachineError):
+        token.callTokenFromAll(dividend, {"from": account1})
+    # ---------------------------------------------
+    # ---------------------------------------------
+    # Checking 'Is Callable' Condition
+    # ---------------------------------------------
+    token1 = Token.deploy(
+        token_name,
+        token_symbol,
+        initial_supply,
+        (redeem_state, 1, payment_frequency, interest_type),
+        int(datetime(2050, 3, 27, 15, 42).timestamp()),
+        payment_token.address,
+        identityRegistry.address,
+        price,
+        face_value,
+        interest_rate,
+        {"from": account1},
+    )
+    token1.issueToken(amount, account, {"from": account1})
+    payment_token.transfer(token1, amount * face_value, {"from": account1})
+    with pytest.raises(exceptions.VirtualMachineError):
+        token1.callTokenFromAll(0, {"from": account1})
+    # ---------------------------------------------
+
+
+def test_can_set_put_period():
+    pass

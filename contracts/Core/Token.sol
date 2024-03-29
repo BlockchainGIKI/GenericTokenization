@@ -907,10 +907,71 @@ contract Token is Ownable {
     function callToken(
         address _tokenHolder,
         uint256 _amount
-    ) public onlyOwner isNonZero(_amount) isCallable {}
+    ) public onlyOwner isCallable investorExists(_tokenHolder) {
+        require(block.timestamp < maturityDate, "The token has matured");
+        uint256 balance = asset.balanceOf(_tokenHolder);
+        require(
+            IERC20(paymentToken).balanceOf(address(this)) >= balance + _amount,
+            "You do not have sufficient funds to reimburse this token holder!"
+        );
+        bool success = IERC20(paymentToken).transfer(
+            _tokenHolder,
+            balance * faceValue + _amount
+        );
+        if (!success) {
+            revert Token__ExchangeFailed();
+        }
+        asset.burn(_tokenHolder, balance);
+    }
+
+    function callTokenFromAll(uint256 _amount) public onlyOwner isCallable {
+        require(block.timestamp < maturityDate, "The token has matured");
+        address[] memory tokenHolders = asset.getTokenHolders();
+        uint256 balance = asset.totalSupply();
+        require(
+            IERC20(paymentToken).balanceOf(address(this)) >=
+                balance * faceValue + _amount * tokenHolders.length,
+            "You do not have sufficient funds to reimburse all token holders!"
+        );
+        for (uint256 i = 0; i < tokenHolders.length; i++) {
+            IERC20(paymentToken).transfer(
+                tokenHolders[i],
+                asset.balanceOf(tokenHolders[i]) * faceValue + _amount
+            );
+            asset.burn(tokenHolders[i], asset.balanceOf(tokenHolders[i]));
+        }
+    }
+
+    uint256 public startDate;
+    uint256 public endDate;
+    function setPutPeriod(
+        uint256 _startDate,
+        uint256 _endDate
+    ) public onlyOwner isPutable isNonZero(_startDate) isNonZero(_endDate) {
+        require(
+            (_endDate > _startDate) && (_endDate <= maturityDate),
+            "The end date should be greater than start date and less than maturity"
+        );
+        require(
+            (contractDeploymentTime <= _startDate) &&
+                (_startDate < maturityDate) &&
+                (block.timestamp <= _startDate),
+            "The start date should be set between the contract deployment time and maturity"
+        );
+        startDate = _startDate;
+        endDate = _endDate;
+    }
 
     function getBalance(address _user) public view returns (uint256) {
         return asset.balanceOf(_user);
+    }
+
+    function getTotalSupply() public view returns (uint256) {
+        return asset.totalSupply();
+    }
+
+    function getTokenHolders() public view returns (address[] memory) {
+        return asset.getTokenHolders();
     }
 
     function getAddress() public view returns (address) {

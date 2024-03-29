@@ -43,6 +43,9 @@ contract Asset is ERC20, Ownable {
 
     function burn(address _account, uint256 _amount) public onlyOwner {
         _burn(_account, _amount);
+        if (balanceOf(_account) == 0 && owner() != _account) {
+            deleteTokenHolder(_account);
+        }
     }
 
     function transfer(
