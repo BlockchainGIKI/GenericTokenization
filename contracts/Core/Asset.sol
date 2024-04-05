@@ -41,7 +41,7 @@ contract Asset is ERC20, Ownable {
         }
     }
 
-    function burn(address _account, uint256 _amount) public onlyOwner {
+    function burn(address _account, uint256 _amount) external onlyOwner {
         _burn(_account, _amount);
         if (balanceOf(_account) == 0 && owner() != _account) {
             deleteTokenHolder(_account);
@@ -89,7 +89,7 @@ contract Asset is ERC20, Ownable {
     }
 
     function getTokenHolders()
-        public
+        external
         view
         onlyOwner
         returns (address[] memory)

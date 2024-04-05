@@ -8,13 +8,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IIdentityRegistry} from "@T-REX/contracts/registry/interface/IIdentityRegistry.sol";
 import {Asset} from "./Asset.sol";
 
-contract Token is Ownable {
+contract Debts is Ownable {
     ///////////////////
     // Errors /////////
     ///////////////////
     error Token__TokenIsNotOfExchangeableType();
     error Token__TokenIsNotOfExtendibleType();
-    error Token__TokenIsNotOfRedeemableType();
     error Token__InputParameterIsZero();
     error Token__InputAddressIsZero();
     error Token__ExchangeTokenIsNotAllowed();
@@ -198,17 +197,6 @@ contract Token is Ownable {
         _;
     }
 
-    modifier isRedeemable() {
-        if (
-            redemptionState != Redemption.REDEEMABLE &&
-            redemptionState != Redemption.REDEEMABLE_EXTENDIBLE &&
-            redemptionState != Redemption.REDEEMABLE_EXCHANGEABLE_EXTENDIBLE
-        ) {
-            revert Token__TokenIsNotOfRedeemableType();
-        }
-        _;
-    }
-
     modifier isNonZero(uint256 _input) {
         if (_input == 0) {
             revert Token__InputParameterIsZero();
@@ -372,9 +360,6 @@ contract Token is Ownable {
         string memory _name,
         string memory _symbol,
         uint256 _initialSupply,
-        // Redemption _redemptionState,
-        // PaymentFrequency _paymentFrequency,
-        // InterestType _interestType,
         TokenOptions memory options,
         uint256 _maturityDate,
         address _paymentToken,
@@ -479,25 +464,6 @@ contract Token is Ownable {
         asset.transfer(_to, _amount);
     }
 
-    function exchangeToken(
-        address _exchangeToken,
-        uint256 _amount
-    )
-        public
-        isVerified
-        isExchangeable
-        isAllowedExchangeToken(_exchangeToken)
-        hasSufficientBalance(_amount, msg.sender)
-        hasSufficientAllowance(_amount, msg.sender)
-    {
-        uint256 totalAmount = _amount * conversionRate[_exchangeToken];
-        asset.transferFrom(msg.sender, address(this), _amount);
-        bool success = IERC20(_exchangeToken).transfer(msg.sender, totalAmount);
-        if (!success) {
-            revert Token__ExchangeFailed();
-        }
-    }
-
     function extendMaturityDate(
         uint256 _buybackDate
     ) public onlyOwner isExtendible isNonZero(_buybackDate) {
@@ -506,34 +472,6 @@ contract Token is Ownable {
             "Buyback date should be greater than current time"
         );
         maturityDate = _buybackDate;
-    }
-
-    function redeemToken(
-        uint256 _amount
-    )
-        public
-        isVerified
-        isRedeemable
-        isNonZero(_amount)
-        hasSufficientBalance(_amount, msg.sender)
-        hasSufficientAllowance(_amount, msg.sender)
-    {
-        require(
-            maturityDate < block.timestamp,
-            "Buyback date should be less than current time"
-        );
-        require(
-            price * _amount <= IERC20(paymentToken).balanceOf(address(this)),
-            "The smart contract does not have sufficient funds"
-        );
-        asset.transferFrom(msg.sender, address(this), _amount);
-        bool success = IERC20(paymentToken).transfer(
-            msg.sender,
-            price * _amount
-        );
-        if (!success) {
-            revert Token__ExchangeFailed();
-        }
     }
 
     function payInterest(
@@ -977,7 +915,7 @@ contract Token is Ownable {
             "You cannot put the token outside of the put period"
         );
         require(
-            asset.balanceOf(msg.sender) <= _amount &&
+            asset.balanceOf(msg.sender) >= _amount &&
                 IERC20(paymentToken).balanceOf(address(this)) >=
                 _amount * faceValue,
             "The token redemption exceeds the current balance"
@@ -1019,8 +957,4 @@ contract Token is Ownable {
     function getPeriodicPayment() public view returns (uint256) {
         return periodicPayment;
     }
-
-    // function test(CashReceipt memory _cash) public pure returns (uint256) {
-    //     return _cash.date;
-    // }
 }
