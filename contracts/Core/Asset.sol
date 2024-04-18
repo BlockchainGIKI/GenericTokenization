@@ -5,6 +5,7 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import {IIdentityRegistry} from "@T-REX/contracts/registry/interface/IIdentityRegistry.sol";
+import "./FORM.sol";
 
 contract Asset is ERC20, Ownable {
     IIdentityRegistry internal _tokenIdentityRegistry;
@@ -53,13 +54,13 @@ contract Asset is ERC20, Ownable {
         uint256 _amount
     ) public override returns (bool) {
         require(_amount <= balanceOf(msg.sender), "Insufficient Balance");
-        if (_tokenIdentityRegistry.isVerified(_to)) {
+        if (_tokenIdentityRegistry.isVerified(_to) || _to == owner()) {
             _transfer(msg.sender, _to, _amount);
             if (balanceOf(msg.sender) == 0 && owner() != msg.sender) {
                 deleteTokenHolder(msg.sender);
             }
             (bool exists, ) = tokenHolderExists(_to);
-            if (!exists) {
+            if (!exists && _to != owner()) {
                 tokenHolders.push(_to);
             }
             return true;
@@ -91,8 +92,10 @@ contract Asset is ERC20, Ownable {
     function getTokenHolders()
         external
         view
-        onlyOwner
-        returns (address[] memory)
+        returns (
+            // onlyOwner
+            address[] memory
+        )
     {
         return tokenHolders;
     }

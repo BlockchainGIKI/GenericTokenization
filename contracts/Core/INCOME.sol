@@ -162,6 +162,8 @@ contract INCOME is Ownable {
         if (_redemption != address(0)) {
             maturityDate = IREDEMPTION(_redemption).getMaturityDate();
         }
+
+        contractDeploymentTime = block.timestamp;
     }
 
     function payIncome(
