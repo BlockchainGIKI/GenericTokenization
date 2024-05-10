@@ -135,6 +135,7 @@ def deploy():
         trustedIssuersRegistry, claimTopicsRegistry, identityStorage, {"from": account}
     )
     identity = Identity.deploy(account, False, {"from": account})
+    identity1 = Identity.deploy(account1, False, {"from": account1})
     identity2 = Identity.deploy(account2, False, {"from": account2})
     claimIssuer = ClaimIssuer.deploy(account1, {"from": account})
 
@@ -142,6 +143,7 @@ def deploy():
     encoded_data = encode_abi(["address"], [account1.address])
     account1_key = Web3.keccak(encoded_data)
     identity.addKey(account1_key, 3, 1, {"from": account})
+    identity1.addKey(account1_key, 3, 1, {"from": account1})
     identity2.addKey(account1_key, 3, 1, {"from": account2})
 
     # Adding claim
@@ -149,14 +151,20 @@ def deploy():
     encoded_message = encode_abi(
         ["address", "uint256", "bytes"], [identity.address, 1947, data]
     )
+    encoded_message1 = encode_abi(
+        ["address", "uint256", "bytes"], [identity1.address, 1947, data]
+    )
     encoded_message2 = encode_abi(
         ["address", "uint256", "bytes"], [identity2.address, 1947, data]
     )
     hashed_message = Web3.keccak(encoded_message)
+    hashed_message1 = Web3.keccak(encoded_message1)
     hashed_message2 = Web3.keccak(encoded_message2)
     msg = encode_defunct(hexstr=str(hashed_message.hex()))
+    msg1 = encode_defunct(hexstr=str(hashed_message1.hex()))
     msg2 = encode_defunct(hexstr=str(hashed_message2.hex()))
     signedObject = Account.sign_message(msg, config["wallets"]["from_key"])
+    signedObject1 = Account.sign_message(msg1, config["wallets"]["from_key"])
     signedObject2 = Account.sign_message(msg2, config["wallets"]["from_key"])
     identity.addClaim(
         1947,
@@ -166,6 +174,15 @@ def deploy():
         data,
         "Placeholder URI",
         {"from": account},
+    )
+    identity1.addClaim(
+        1947,
+        1,
+        claimIssuer.address,
+        signedObject1.signature,
+        data,
+        "Placeholder URI",
+        {"from": account1},
     )
     identity2.addClaim(
         1947,
@@ -179,6 +196,7 @@ def deploy():
 
     # Adding identity to the identity registry
     identityRegistry.registerIdentity(account, identity, 586)
+    identityRegistry.registerIdentity(account1, identity1, 586)
     identityRegistry.registerIdentity(account2, identity2, 586)
 
     # Adding trusted claim issuer to trusted issuers registry
@@ -190,6 +208,7 @@ def deploy():
     claimTopicsRegistry.addClaimTopic(1947, {"from": account})
 
     # Deploying tokens
+    # account3 = get_account(3)
     payment_token = PaymentToken.deploy(1e12, {"from": account1})
     # token = Token.deploy(
     #     "Name",

@@ -30,11 +30,12 @@ contract OptionAssets {
     }
 }
 
-contract FinancialFuturesAssets {
+contract FuturesAssets {
     ///////////////////
     // Enums //////////
     ///////////////////
-    enum Underlying {
+    enum FinancialUnderlying {
+        NONE,
         BASKETS,
         STOCK_EQUITIES,
         DEBT_INSTRUMENTS,
@@ -47,23 +48,8 @@ contract FinancialFuturesAssets {
         STOCK_DIVIDEND,
         OTHERS
     }
-
-    ////////////////////
-    // State Variables /
-    ///////////////////
-    // Used to specify underlying asset of the options token
-    Underlying public underlyingAsset;
-
-    constructor(Underlying _underlyingAsset) {
-        underlyingAsset = _underlyingAsset;
-    }
-}
-
-contract CommoditiesFuturesAssets {
-    ///////////////////
-    // Enums //////////
-    ///////////////////
-    enum Underlying {
+    enum CommoditiesUnderlying {
+        NONE,
         EXTRACTION_RESOURCES,
         AGRICULTURE,
         INDUSTRIAL_PRODUCTS,
@@ -73,14 +59,25 @@ contract CommoditiesFuturesAssets {
         GENERATED_RESOURCES,
         OTHERS
     }
-
     ////////////////////
     // State Variables /
     ///////////////////
-    // Used to specify underlying asset of the options token
-    Underlying public underlyingAsset;
-
-    constructor(Underlying _underlyingAsset) {
-        underlyingAsset = _underlyingAsset;
+    // Used to specify underlying asset of the financial future
+    FinancialUnderlying public financialAsset;
+    // Used to specify underlying asset of the commodities future
+    CommoditiesUnderlying public commoditiesAsset;
+    constructor(
+        FinancialUnderlying _financialAsset,
+        CommoditiesUnderlying _commoditiesAsset
+    ) {
+        require(
+            (_financialAsset != FinancialUnderlying.NONE &&
+                _commoditiesAsset == CommoditiesUnderlying.NONE) ||
+                (_financialAsset == FinancialUnderlying.NONE &&
+                    _commoditiesAsset != CommoditiesUnderlying.NONE),
+            "Either of Financial and Commodities underlying must be NONE"
+        );
+        financialAsset = _financialAsset;
+        commoditiesAsset = _commoditiesAsset;
     }
 }

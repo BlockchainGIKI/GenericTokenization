@@ -372,12 +372,4 @@ contract INTEREST is Ownable {
     ) public onlyOwner isVariable isNonZero(_rate) {
         interestRate = _rate;
     }
-
-    function getTimestamp() public view returns (uint256) {
-        return block.timestamp;
-    }
-
-    function getMaturity() public view returns (uint256) {
-        return maturityDate;
-    }
 }

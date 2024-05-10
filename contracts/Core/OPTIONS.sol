@@ -36,6 +36,12 @@ contract OPTIONS is EXERCISE, OptionAssets, DELIVERY, STANDARD, Ownable {
         Standard _standardState;
     }
 
+    struct OptionsParams {
+        uint256 _strikePrice;
+        uint256 _contractSize;
+        uint256 _spotPrice;
+    }
+
     ////////////////////
     // State Variables /
     ///////////////////
@@ -63,6 +69,7 @@ contract OPTIONS is EXERCISE, OptionAssets, DELIVERY, STANDARD, Ownable {
     ///////////////////
     constructor(
         OptionsConfigurations memory config,
+        OptionsParams memory params,
         uint256 _expirationDate,
         uint256 _startDate,
         address _parameters
@@ -79,6 +86,9 @@ contract OPTIONS is EXERCISE, OptionAssets, DELIVERY, STANDARD, Ownable {
         STANDARD(config._standardState)
     {
         optionState = config._optionsState;
+        strikePrice = params._strikePrice;
+        contractSize = params._contractSize;
+        spotPrice = params._spotPrice;
     }
 
     function call(address _receiver) internal {
@@ -164,7 +174,7 @@ contract OPTIONS is EXERCISE, OptionAssets, DELIVERY, STANDARD, Ownable {
                 _receiptNumber,
                 _date,
                 owner(),
-                asset.balanceOf(_receiver) * contractSize,
+                asset.balanceOf(msg.sender) * contractSize,
                 _delivererSignature
             );
         }
@@ -186,8 +196,8 @@ contract OPTIONS is EXERCISE, OptionAssets, DELIVERY, STANDARD, Ownable {
             put();
             physicallyDeliver(
                 _token,
-                asset.balanceOf(_receiver) * contractSize,
-                _receiver
+                asset.balanceOf(msg.sender) * contractSize,
+                owner()
             );
         }
     }

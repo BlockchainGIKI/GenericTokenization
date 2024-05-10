@@ -11,21 +11,21 @@ contract REIMBURSEMENT is Ownable {
     ///////////////////
     // Errors /////////
     ///////////////////
-    error Token__TokenIsNotOfPayableType();
+    error Debt__TokenIsNotOfPayableType();
     error Token__TokenIsNotOfExtendibleType();
-    error Token__InputParameterIsZero();
-    error Token__ExchangeFailed();
-    error Token__InvestorDoesNotExist();
+    error Debt__InputParameterIsZero();
+    error Debt__ExchangeFailed();
+    error Debt__InvestorDoesNotExist();
     error Token__ReimbursementIsNotofMaturityType();
     error Token__ReimbursementIsNOtOfAmortizableType();
     error Token__ReimbursementIsOfAmortizableType();
     error Token__TokenIsNotOfCallableType();
-    error Token__TokenIsNotOfPutType();
+    error Debt__TokenIsNotOfPutType();
 
     ///////////////////
     // Enums //////////
     ///////////////////
-    enum PaymentFrequency {
+    enum PaymentFreq {
         NONE,
         DAILY,
         WEEKLY,
@@ -54,19 +54,19 @@ contract REIMBURSEMENT is Ownable {
     // State Variables /
     ///////////////////
     // Used to specify payment frequency of the token
-    PaymentFrequency public paymentFrequency;
+    PaymentFreq public rpaymentFrequency;
     // Used to specify redemption/reimbursement (payout at maturity) state of the token
     Reimbursement public reimbursementState;
     // Used to specify maturity date of the token
-    uint256 public maturityDate;
+    uint256 public rmaturityDate;
     // Set to the current block timestamp when the contract is deployed
-    uint256 public contractDeploymentTime;
+    uint256 public rcontractDeploymentTime;
     // Set to the address of the parameters contract
-    address public parameters;
+    address public rparameters;
     // The face value of the asset
-    uint256 public faceValue;
+    uint256 public rfaceValue;
     // Refers to the interest rate of the token set during contract deployment. Can optionally be modified if interest rate type is variable
-    uint256 public interestRate;
+    uint256 public rinterestRate;
     // Refers to the periodic interest rate obtained by dividing the token duration with the payment frequency
     uint256 public periodicInterestRate;
     // Refers to the duration of the token
@@ -95,10 +95,10 @@ contract REIMBURSEMENT is Ownable {
     ///////////////////
     // Mappings ///////
     ///////////////////
-    mapping(PaymentFrequency => uint256) private paymentFrequencyToSeconds;
-    mapping(PaymentFrequency => uint256) private paymentFrequencyToLoanTerm;
+    mapping(PaymentFreq => uint256) private paymentFrequencyToSeconds;
+    mapping(PaymentFreq => uint256) private paymentFrequencyToLoanTerm;
     mapping(address => mapping(uint256 => bool))
-        public investorToPaymentPeriodToStatus;
+        public rinvestorToPaymentPeriodToStatus;
     mapping(address => bool) public investorToMaturityPaymentStatus;
 
     ///////////////////
@@ -111,25 +111,25 @@ contract REIMBURSEMENT is Ownable {
         _;
     }
 
-    modifier isNonZero(uint256 _input) {
+    modifier risNonZero(uint256 _input) {
         if (_input == 0) {
-            revert Token__InputParameterIsZero();
+            revert Debt__InputParameterIsZero();
         }
         _;
     }
 
-    modifier isPayable() {
-        if (paymentFrequency == PaymentFrequency.NONE) {
-            revert Token__TokenIsNotOfPayableType();
+    modifier risPayable() {
+        if (rpaymentFrequency == PaymentFreq.NONE) {
+            revert Debt__TokenIsNotOfPayableType();
         }
         _;
     }
 
-    modifier investorExists(address _investor) {
-        address assetAddress = IParameters(parameters).getAssetAddress();
+    modifier rinvestorExists(address _investor) {
+        address assetAddress = IParameters(rparameters).getAssetAddress();
         (bool status, ) = IAsset(assetAddress).tokenHolderExists(_investor);
         if (!status) {
-            revert Token__InvestorDoesNotExist();
+            revert Debt__InvestorDoesNotExist();
         }
         _;
     }
@@ -197,7 +197,7 @@ contract REIMBURSEMENT is Ownable {
             Reimbursement.AMORTIZATION_WITH_PUT_AND_CALL &&
             reimbursementState != Reimbursement.PERPETUAL_WITH_PUT
         ) {
-            revert Token__TokenIsNotOfPutType();
+            revert Debt__TokenIsNotOfPutType();
         }
         _;
     }
@@ -207,20 +207,20 @@ contract REIMBURSEMENT is Ownable {
     ///////////////////
     constructor(
         Reimbursement _reimbursementState,
-        PaymentFrequency _paymentFrequency,
+        PaymentFreq _paymentFrequency,
         address _parameters,
         uint256 _maturityDate,
         uint256 _faceValue,
         uint256 _interestRate
     ) {
         reimbursementState = _reimbursementState;
-        paymentFrequency = _paymentFrequency;
-        faceValue = _faceValue;
-        interestRate = _interestRate;
-        parameters = _parameters;
+        rpaymentFrequency = _paymentFrequency;
+        rfaceValue = _faceValue;
+        rinterestRate = _interestRate;
+        rparameters = _parameters;
 
         if (
-            (_paymentFrequency != PaymentFrequency.NONE) &&
+            (_paymentFrequency != PaymentFreq.NONE) &&
             (_reimbursementState != Reimbursement.PERPETUAL &&
                 _reimbursementState != Reimbursement.PERPETUAL_WITH_CALL &&
                 _reimbursementState != Reimbursement.PERPETUAL_WITH_PUT)
@@ -229,47 +229,45 @@ contract REIMBURSEMENT is Ownable {
                 _maturityDate > block.timestamp,
                 "Maturity/Buyback date should be greater than current time"
             );
-            maturityDate = _maturityDate;
+            rmaturityDate = _maturityDate;
         }
+        paymentFrequencyToSeconds[PaymentFreq.DAILY] = AVERAGE_SECONDS_IN_A_DAY;
         paymentFrequencyToSeconds[
-            PaymentFrequency.DAILY
-        ] = AVERAGE_SECONDS_IN_A_DAY;
-        paymentFrequencyToSeconds[
-            PaymentFrequency.SEMIMONTHLY
+            PaymentFreq.SEMIMONTHLY
         ] = AVERAGE_SECONDS_IN_SEMI_MONTH;
         paymentFrequencyToSeconds[
-            PaymentFrequency.WEEKLY
+            PaymentFreq.WEEKLY
         ] = AVERAGE_SECONDS_IN_A_WEEK;
         paymentFrequencyToSeconds[
-            PaymentFrequency.MONTHLY
+            PaymentFreq.MONTHLY
         ] = AVERAGE_SECONDS_IN_A_MONTH;
         paymentFrequencyToSeconds[
-            PaymentFrequency.ANNUALY
+            PaymentFreq.ANNUALY
         ] = AVERAGE_SECONDS_IN_A_YEAR;
-        paymentFrequencyToLoanTerm[PaymentFrequency.DAILY] = DAYS_IN_A_YEAR;
-        paymentFrequencyToLoanTerm[PaymentFrequency.WEEKLY] = WEEKS_IN_A_YEAR;
+        paymentFrequencyToLoanTerm[PaymentFreq.DAILY] = DAYS_IN_A_YEAR;
+        paymentFrequencyToLoanTerm[PaymentFreq.WEEKLY] = WEEKS_IN_A_YEAR;
         paymentFrequencyToLoanTerm[
-            PaymentFrequency.SEMIMONTHLY
+            PaymentFreq.SEMIMONTHLY
         ] = SEMI_MONTHS_IN_A_YEAR;
-        paymentFrequencyToLoanTerm[PaymentFrequency.MONTHLY] = MONTHS_IN_A_YEAR;
-        paymentFrequencyToLoanTerm[PaymentFrequency.ANNUALY] = YEAR_IN_A_YEAR;
-        contractDeploymentTime = block.timestamp;
+        paymentFrequencyToLoanTerm[PaymentFreq.MONTHLY] = MONTHS_IN_A_YEAR;
+        paymentFrequencyToLoanTerm[PaymentFreq.ANNUALY] = YEAR_IN_A_YEAR;
+        rcontractDeploymentTime = block.timestamp;
         if (
             reimbursementState == Reimbursement.AMORTIZATION ||
             reimbursementState == Reimbursement.AMORTIZATION_WITH_CALL ||
             reimbursementState == Reimbursement.AMORTIZATION_WITH_PUT ||
             reimbursementState == Reimbursement.AMORTIZATION_WITH_PUT_AND_CALL
         ) {
-            uint256 PRECISION = IParameters(parameters).getPrecision();
+            uint256 PRECISION = IParameters(rparameters).getPrecision();
             periodicInterestRate =
-                (interestRate * 10 ** PRECISION) /
-                (paymentFrequencyToLoanTerm[paymentFrequency] * 100);
+                (rinterestRate * 10 ** PRECISION) /
+                (paymentFrequencyToLoanTerm[rpaymentFrequency] * 100);
             loanTerm =
-                (maturityDate *
+                (rmaturityDate *
                     10 ** PRECISION -
-                    contractDeploymentTime *
+                    rcontractDeploymentTime *
                     10 ** PRECISION) /
-                paymentFrequencyToSeconds[paymentFrequency];
+                paymentFrequencyToSeconds[rpaymentFrequency];
         }
         perpetualStatus =
             reimbursementState == Reimbursement.PERPETUAL ||
@@ -279,60 +277,62 @@ contract REIMBURSEMENT is Ownable {
 
     function extendMaturityDate(
         uint256 _buybackDate
-    ) public onlyOwner isExtendible isNonZero(_buybackDate) {
+    ) public onlyOwner isExtendible risNonZero(_buybackDate) {
         require(
             _buybackDate > block.timestamp,
             "Buyback date should be greater than current time"
         );
-        maturityDate = _buybackDate;
+        rmaturityDate = _buybackDate;
     }
 
     function payAtMaturity(
         address _investor
-    ) public onlyOwner hasMaturityPayment investorExists(_investor) {
+    ) public onlyOwner hasMaturityPayment rinvestorExists(_investor) {
         require(
-            maturityDate <= block.timestamp,
+            rmaturityDate <= block.timestamp,
             "The token has not matured yet!"
         );
         require(
             !investorToMaturityPaymentStatus[_investor],
             "The token holder has already been paid"
         );
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         require(
             IERC20(paymentToken).balanceOf(address(this)) >=
-                faceValue * asset.balanceOf(_investor),
+                rfaceValue * asset.balanceOf(_investor),
             "You do not have sufficient balance to pay this token holder"
         );
         bool success = IERC20(paymentToken).transfer(
             _investor,
-            faceValue * asset.balanceOf(_investor)
+            rfaceValue * asset.balanceOf(_investor)
         );
         if (!success) {
-            revert Token__ExchangeFailed();
+            revert Debt__ExchangeFailed();
         }
         investorToMaturityPaymentStatus[_investor] = true;
     }
 
     function payAtMaturityToAll() public onlyOwner hasMaturityPayment {
         require(
-            maturityDate <= block.timestamp,
+            rmaturityDate <= block.timestamp,
             "The token has not matured yet!"
         );
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         address[] memory tokenHolders = asset.getTokenHolders();
         require(
             IERC20(paymentToken).balanceOf(address(this)) >=
-                faceValue * asset.totalSupply(),
+                rfaceValue * asset.totalSupply(),
             "You do not have sufficient balance to pay this token holder"
         );
         for (uint256 i = 0; i < tokenHolders.length; i++) {
             if (!investorToMaturityPaymentStatus[tokenHolders[i]]) {
                 IERC20(paymentToken).transfer(
                     tokenHolders[i],
-                    faceValue * asset.balanceOf(tokenHolders[i])
+                    rfaceValue * asset.balanceOf(tokenHolders[i])
                 );
                 investorToMaturityPaymentStatus[tokenHolders[i]] = true;
             }
@@ -342,14 +342,14 @@ contract REIMBURSEMENT is Ownable {
     function setAmortizationSchedule(
         uint256 numerator,
         uint256 denominator
-    ) public isAmortizable isNonZero(denominator) isNonZero(numerator) {
+    ) public isAmortizable risNonZero(denominator) risNonZero(numerator) {
         require(
             msg.sender == owner() || msg.sender == address(this),
             "This function is only callable by the owner or the smart contract itself"
         );
-        uint256 PRECISION = IParameters(parameters).getPrecision();
+        uint256 PRECISION = IParameters(rparameters).getPrecision();
         periodicPayment =
-            (faceValue * 10 ** PRECISION * numerator) /
+            (rfaceValue * 10 ** PRECISION * numerator) /
             denominator;
     }
 
@@ -359,35 +359,36 @@ contract REIMBURSEMENT is Ownable {
         public
         onlyOwner
         isAmortizable
-        investorExists(_tokenHolder)
-        isNonZero(periodicPayment)
+        rinvestorExists(_tokenHolder)
+        risNonZero(periodicPayment)
     {
         require(
             !investorToMaturityPaymentStatus[_tokenHolder],
             "Token has matured!"
         );
-        uint256 PRECISION = IParameters(parameters).getPrecision();
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        uint256 PRECISION = IParameters(rparameters).getPrecision();
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         uint256 payment = (asset.balanceOf(_tokenHolder) * periodicPayment) /
             10 ** PRECISION;
         require(
             IERC20(paymentToken).balanceOf(address(this)) >= payment,
             "You do not have sufficient balance to pay this investor!"
         );
-        uint256 duration = (block.timestamp - contractDeploymentTime) /
-            paymentFrequencyToSeconds[paymentFrequency];
+        uint256 duration = (block.timestamp - rcontractDeploymentTime) /
+            paymentFrequencyToSeconds[rpaymentFrequency];
         require(
-            !investorToPaymentPeriodToStatus[_tokenHolder][duration],
+            !rinvestorToPaymentPeriodToStatus[_tokenHolder][duration],
             "The token holder has already been paid for this payment period"
         );
         bool success = IERC20(paymentToken).transfer(_tokenHolder, payment);
         if (!success) {
-            revert Token__ExchangeFailed();
+            revert Debt__ExchangeFailed();
         }
-        investorToPaymentPeriodToStatus[_tokenHolder][duration] = true;
-        uint256 maxPeriod = (maturityDate - contractDeploymentTime) /
-            paymentFrequencyToSeconds[paymentFrequency];
+        rinvestorToPaymentPeriodToStatus[_tokenHolder][duration] = true;
+        uint256 maxPeriod = (rmaturityDate - rcontractDeploymentTime) /
+            paymentFrequencyToSeconds[rpaymentFrequency];
         if (duration >= maxPeriod) {
             investorToMaturityPaymentStatus[_tokenHolder] = true;
         }
@@ -397,24 +398,25 @@ contract REIMBURSEMENT is Ownable {
         public
         onlyOwner
         isAmortizable
-        isNonZero(periodicPayment)
+        risNonZero(periodicPayment)
     {
-        uint256 PRECISION = IParameters(parameters).getPrecision();
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        uint256 PRECISION = IParameters(rparameters).getPrecision();
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         address[] memory tokenHolders = asset.getTokenHolders();
         require(
             IERC20(paymentToken).balanceOf(address(this)) >=
                 (asset.totalSupply() * periodicPayment) / 10 ** PRECISION,
             "You do not have sufficient balance to pay all token holders!"
         );
-        uint256 duration = (block.timestamp - contractDeploymentTime) /
-            paymentFrequencyToSeconds[paymentFrequency];
-        uint256 maxPeriod = (maturityDate - contractDeploymentTime) /
-            paymentFrequencyToSeconds[paymentFrequency];
+        uint256 duration = (block.timestamp - rcontractDeploymentTime) /
+            paymentFrequencyToSeconds[rpaymentFrequency];
+        uint256 maxPeriod = (rmaturityDate - rcontractDeploymentTime) /
+            paymentFrequencyToSeconds[rpaymentFrequency];
         for (uint256 i = 0; i < tokenHolders.length; i++) {
             if (
-                !investorToPaymentPeriodToStatus[tokenHolders[i]][duration] &&
+                !rinvestorToPaymentPeriodToStatus[tokenHolders[i]][duration] &&
                 !investorToMaturityPaymentStatus[tokenHolders[i]]
             ) {
                 IERC20(paymentToken).transfer(
@@ -422,7 +424,7 @@ contract REIMBURSEMENT is Ownable {
                     ((periodicPayment * asset.balanceOf(tokenHolders[i])) /
                         10 ** PRECISION)
                 );
-                investorToPaymentPeriodToStatus[tokenHolders[i]][
+                rinvestorToPaymentPeriodToStatus[tokenHolders[i]][
                     duration
                 ] = true;
                 if (duration >= maxPeriod) {
@@ -439,40 +441,41 @@ contract REIMBURSEMENT is Ownable {
     )
         public
         onlyOwner
-        isNonZero(_rate)
-        isNonZero(numerator)
-        isNonZero(denominator)
+        risNonZero(_rate)
+        risNonZero(numerator)
+        risNonZero(denominator)
         isAmortizable
     {
-        interestRate = _rate;
+        rinterestRate = _rate;
         periodicInterestRate = calculatePeriodicInterestRate(_rate);
         setAmortizationSchedule(numerator, denominator);
     }
 
     function calculatePeriodicInterestRate(
         uint256 _rate
-    ) public view isNonZero(_rate) returns (uint256) {
-        uint256 PRECISION = IParameters(parameters).getPrecision();
+    ) public view risNonZero(_rate) returns (uint256) {
+        uint256 PRECISION = IParameters(rparameters).getPrecision();
         return
             (_rate * 10 ** PRECISION) /
-            (paymentFrequencyToLoanTerm[paymentFrequency] * 100);
+            (paymentFrequencyToLoanTerm[rpaymentFrequency] * 100);
     }
 
     function issueToken(
         uint256 _amount,
         address _to
-    ) public onlyOwner isNonZero(_amount) {
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
+    ) public onlyOwner risNonZero(_amount) {
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
         asset.transfer(_to, _amount);
     }
 
     function callToken(
         address _tokenHolder,
         uint256 _amount
-    ) public onlyOwner isCallable investorExists(_tokenHolder) {
-        require(block.timestamp < maturityDate, "The token has matured");
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+    ) public onlyOwner isCallable rinvestorExists(_tokenHolder) {
+        require(block.timestamp < rmaturityDate, "The token has matured");
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         uint256 balance = asset.balanceOf(_tokenHolder);
         require(
             IERC20(paymentToken).balanceOf(address(this)) >= balance + _amount,
@@ -480,29 +483,30 @@ contract REIMBURSEMENT is Ownable {
         );
         bool success = IERC20(paymentToken).transfer(
             _tokenHolder,
-            balance * faceValue + _amount
+            balance * rfaceValue + _amount
         );
         if (!success) {
-            revert Token__ExchangeFailed();
+            revert Debt__ExchangeFailed();
         }
         asset.burn(_tokenHolder, balance);
     }
 
     function callTokenFromAll(uint256 _amount) public onlyOwner isCallable {
-        require(block.timestamp < maturityDate, "The token has matured");
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        require(block.timestamp < rmaturityDate, "The token has matured");
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         address[] memory tokenHolders = asset.getTokenHolders();
         uint256 balance = asset.totalSupply();
         require(
             IERC20(paymentToken).balanceOf(address(this)) >=
-                balance * faceValue + _amount * tokenHolders.length,
+                balance * rfaceValue + _amount * tokenHolders.length,
             "You do not have sufficient funds to reimburse all token holders!"
         );
         for (uint256 i = 0; i < tokenHolders.length; i++) {
             IERC20(paymentToken).transfer(
                 tokenHolders[i],
-                asset.balanceOf(tokenHolders[i]) * faceValue + _amount
+                asset.balanceOf(tokenHolders[i]) * rfaceValue + _amount
             );
             asset.burn(tokenHolders[i], asset.balanceOf(tokenHolders[i]));
         }
@@ -511,13 +515,13 @@ contract REIMBURSEMENT is Ownable {
     function setPutPeriod(
         uint256 _startDate,
         uint256 _endDate
-    ) public onlyOwner isPutable isNonZero(_startDate) isNonZero(_endDate) {
+    ) public onlyOwner isPutable risNonZero(_startDate) risNonZero(_endDate) {
         require(
-            (_endDate > _startDate) && (_endDate <= maturityDate),
+            (_endDate > _startDate) && (_endDate <= rmaturityDate),
             "The end date should be greater than start date and less than maturity"
         );
         require(
-            (contractDeploymentTime <= _startDate) &&
+            (rcontractDeploymentTime <= _startDate) &&
                 (block.timestamp <= _startDate),
             "The start date should be set between the contract deployment time and maturity"
         );
@@ -530,38 +534,31 @@ contract REIMBURSEMENT is Ownable {
     )
         public
         isPutable
-        isNonZero(startDate)
-        investorExists(msg.sender)
-        isNonZero(_amount)
+        risNonZero(startDate)
+        rinvestorExists(msg.sender)
+        risNonZero(_amount)
     {
         require(
             startDate <= block.timestamp && block.timestamp <= endDate,
             "You cannot put the token outside of the put period"
         );
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        IAsset asset = IAsset(IParameters(rparameters).getAssetAddress());
+        address paymentToken = IParameters(rparameters)
+            .getPaymentTokenAddress();
         require(
             asset.balanceOf(msg.sender) >= _amount &&
                 IERC20(paymentToken).balanceOf(address(this)) >=
-                _amount * faceValue,
+                _amount * rfaceValue,
             "The token redemption exceeds the current balance"
         );
         bool success = IERC20(paymentToken).transfer(
             msg.sender,
-            _amount * faceValue
+            _amount * rfaceValue
         );
         if (!success) {
-            revert Token__ExchangeFailed();
+            revert Debt__ExchangeFailed();
         }
         asset.burn(msg.sender, _amount);
-    }
-
-    function getTimestamp() public view returns (uint256) {
-        return block.timestamp;
-    }
-
-    function getMaturity() public view returns (uint256) {
-        return maturityDate;
     }
 
     function getPeriodicPayment() public view returns (uint256) {

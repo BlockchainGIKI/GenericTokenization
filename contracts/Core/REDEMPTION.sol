@@ -15,9 +15,9 @@ contract REDEMPTION is Ownable {
     error Token__TokenIsNotOfExchangeableType();
     error Token__TokenIsNotOfExtendibleType();
     error Token__TokenIsNotOfRedeemableType();
-    error Token__InputParameterIsZero();
+    error Equity__InputParameterIsZero();
     error Token__ExchangeTokenIsNotAllowed();
-    error Token__ExchangeFailed();
+    error Equity__ExchangeFailed();
     error Token__InsufficientTokenBalance();
     error Token__InsufficientTokenAllowance();
     error Token__InvestorNotVerified();
@@ -44,13 +44,13 @@ contract REDEMPTION is Ownable {
     // Used to specify buyback date of the token
     uint256 public buybackDate;
     // Used to specify the maturity date of the token
-    uint256 public maturityDate;
+    uint256 public maturity;
     // Used to specify the call price of redeemable tokens
     uint256 public callPrice;
     // Used to maintain an array of authorized tokens that can exchanged or redeemed for this token
     address[] public authorizedExchangeableTokens;
     // Set to the address of the parameters contract
-    address public parameters;
+    address public param;
 
     ///////////////////
     // Mappings ///////
@@ -95,9 +95,9 @@ contract REDEMPTION is Ownable {
         _;
     }
 
-    modifier isNonZero(uint256 _input) {
+    modifier risNonZero(uint256 _input) {
         if (_input == 0) {
-            revert Token__InputParameterIsZero();
+            revert Equity__InputParameterIsZero();
         }
         _;
     }
@@ -110,7 +110,7 @@ contract REDEMPTION is Ownable {
     }
 
     modifier hasSufficientBalance(uint256 _amount, address _sender) {
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
+        IAsset asset = IAsset(IParameters(param).getAssetAddress());
         if (_amount > asset.balanceOf(_sender)) {
             revert Token__InsufficientTokenBalance();
         }
@@ -118,7 +118,7 @@ contract REDEMPTION is Ownable {
     }
 
     modifier hasSufficientAllowance(uint256 _amount, address _sender) {
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
+        IAsset asset = IAsset(IParameters(param).getAssetAddress());
         if (_amount > asset.allowance(msg.sender, address(this))) {
             revert Token__InsufficientTokenAllowance();
         }
@@ -127,7 +127,7 @@ contract REDEMPTION is Ownable {
 
     modifier isVerified() {
         IIdentityRegistry identityRegistry = IIdentityRegistry(
-            IParameters(parameters).getIdentityRegistryAddress()
+            IParameters(param).getIdentityRegistryAddress()
         );
         if (!IIdentityRegistry(identityRegistry).isVerified(msg.sender)) {
             revert Token__InvestorNotVerified();
@@ -142,15 +142,17 @@ contract REDEMPTION is Ownable {
         Redemption _redemptionState,
         uint256 _buybackDate,
         uint256 _maturityDate,
-        uint256 _callPrice
+        uint256 _callPrice,
+        address _parameters
     ) {
         redemptionState = _redemptionState;
+        param = _parameters;
         if ((_redemptionState != Redemption.PERPETUAL)) {
             require(
                 _maturityDate > block.timestamp,
                 "Maturity date should be greater than current time"
             );
-            buybackDate = _buybackDate;
+            maturity = _maturityDate;
         }
         if (
             _redemptionState != Redemption.EXTENDIBLE &&
@@ -195,22 +197,22 @@ contract REDEMPTION is Ownable {
         hasSufficientAllowance(_amount, msg.sender)
     {
         uint256 totalAmount = _amount * conversionRate[_exchangeToken];
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
+        IAsset asset = IAsset(IParameters(param).getAssetAddress());
         asset.transferFrom(msg.sender, address(this), _amount);
         bool success = IERC20(_exchangeToken).transfer(msg.sender, totalAmount);
         if (!success) {
-            revert Token__ExchangeFailed();
+            revert Equity__ExchangeFailed();
         }
     }
 
     function extendMaturityDate(
         uint256 _maturityDate
-    ) external onlyOwner isExtendible isNonZero(_maturityDate) {
+    ) external onlyOwner isExtendible risNonZero(_maturityDate) {
         require(
             _maturityDate > block.timestamp,
             "Maturity date should be greater than current time"
         );
-        maturityDate = _maturityDate;
+        maturity = _maturityDate;
     }
 
     function redeemToken(
@@ -219,7 +221,7 @@ contract REDEMPTION is Ownable {
         external
         isVerified
         isRedeemable
-        isNonZero(_amount)
+        risNonZero(_amount)
         hasSufficientBalance(_amount, msg.sender)
         hasSufficientAllowance(_amount, msg.sender)
     {
@@ -227,24 +229,24 @@ contract REDEMPTION is Ownable {
             block.timestamp >= buybackDate,
             "The token cannot be redeemed before the buyback date has passed!"
         );
-        address paymentToken = IParameters(parameters).getPaymentTokenAddress();
+        address paymentToken = IParameters(param).getPaymentTokenAddress();
         uint256 price = callPrice;
         require(
             price * _amount <= IERC20(paymentToken).balanceOf(address(this)),
             "The smart contract does not have sufficient funds"
         );
-        IAsset asset = IAsset(IParameters(parameters).getAssetAddress());
+        IAsset asset = IAsset(IParameters(param).getAssetAddress());
         asset.transferFrom(msg.sender, address(this), _amount);
         bool success = IERC20(paymentToken).transfer(
             msg.sender,
             price * _amount
         );
         if (!success) {
-            revert Token__ExchangeFailed();
+            revert Equity__ExchangeFailed();
         }
     }
 
     function getMaturityDate() external view returns (uint256) {
-        return maturityDate;
+        return maturity;
     }
 }

@@ -135,9 +135,10 @@ contract INCOME is Ownable {
         Income _incomeState,
         PaymentFrequency _paymentFrequency,
         uint256 _incomeRate,
-        address _parameters,
-        address _redemption
-    ) {
+        uint256 _maturityDate,
+        address _parameters
+    ) // address _redemption
+    {
         incomeState = _incomeState;
         paymentFrequency = _paymentFrequency;
         incomeRate = _incomeRate;
@@ -159,10 +160,10 @@ contract INCOME is Ownable {
             PaymentFrequency.ANNUALY
         ] = AVERAGE_SECONDS_IN_A_YEAR;
 
-        if (_redemption != address(0)) {
-            maturityDate = IREDEMPTION(_redemption).getMaturityDate();
-        }
-
+        // if (_redemption != address(0)) {
+        //     maturityDate = IREDEMPTION(_redemption).getMaturityDate();
+        // }
+        maturityDate = _maturityDate;
         contractDeploymentTime = block.timestamp;
     }
 
